@@ -1,0 +1,17 @@
+//@version=5
+//author:KıvanÇ @fr3762 on twitter
+indicator('Trend Score')
+len = input(10, 'Length')
+up = 0
+dn = 0
+for i = len + 1 to 2 * len by 1
+    if close >= close[i]
+        up += 1
+        up
+    if close < close[i]
+        dn -= 1
+        dn
+Trendscore = up + dn
+plot(Trendscore, color=color.new(color.maroon, 0), linewidth=2)
+plot(0, color=color.new(color.red, 0), linewidth=1)
+plot(5, color=color.new(color.green, 0), linewidth=1)
