@@ -1,7 +1,17 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © Cube_Lee
+
 //@version=5
-indicator(title="Smoothed Moving Average", shorttitle="SMMA", overlay=true, timeframe="", timeframe_gaps=true)
-len = input.int(7, minval=1, title="Length")
-src = input(close, title="Source")
-smma = 0.0
-smma := na(smma[1]) ? ta.sma(src, len) : (smma[1] * (len - 1) + src) / len
-plot(smma, color=#673AB7)
+indicator(title = "Simple Moving Averages 3", shorttitle="SMA3", overlay=true)
+
+len1 = input.int(5, minval=1, title="SMA #1")
+out1 = ta.sma(close, len1)
+plot(out1, title="SMA", color=close >= out1 ? color.blue : color.orange)
+
+len2 = input.int(20, minval=1, title="SMA #2")
+out2 = ta.sma(close, len2)
+plot(out2, title="SMA", color=close >= out2 ? color.blue : color.orange)
+
+len3 = input.int(40, minval=1, title="SMA #3")
+out3 = ta.sma(close, len3)
+plot(out3, title="SMA", color=close >= out3 ? color.blue : color.orange)
