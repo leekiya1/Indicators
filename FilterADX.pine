@@ -1,0 +1,16 @@
+//@version=5
+lenDI = input.int(14, minval=1, title="DI Length")
+Dup = ta.change(high)
+Ddn = -ta.change(low)
+plusDM = na(Dup) ? na : (Dup > Ddn and Dup > 0 ? Dup : 0)
+minusDM = na(Ddn) ? na : (Ddn > Dup and Ddn > 0 ? Ddn : 0)
+trur = ta.rma(ta.tr, lenDI)
+plus = fixnan(100 * ta.rma(plusDM, lenDI) / trur)
+minus = fixnan(100 * ta.rma(minusDM, lenDI) / trur)
+sum = plus + minus
+lensig = input.int(14, title="ADX Smoothing", minval=1, maxval=50)
+ADX = 100 * ta.rma(math.abs(plus - minus) / (sum == 0 ? 1 : sum), lensig)
+thADX = input.float(title='ADX threshold', defval=15)
+abADX = ADX > thADX
+upADX = ADX > ADX[1]
+onADX = abADX and upADX
