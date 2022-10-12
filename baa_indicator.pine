@@ -1,0 +1,359 @@
+//@version=5
+indicator('Bold Asset Allocation', 'BAA', overlay = true)
+
+//****************************************************************************************//
+//                                        인 풋 설 정                                      //
+//****************************************************************************************//
+// 카나리아 자산 입력 (4개)
+canarySym1 = input.symbol('AMEX:SPY', '카나리아 자산1 (S&P500))', group = '카나리아')
+canarySym2 = input.symbol('AMEX:VEA', '카나리아 자산2 (선진국 주식)', group = '카나리아')
+canarySym3 = input.symbol('AMEX:VWO', '카나리아 자산3 (신흥국 주식)', group = '카나리아')
+canarySym4 = input.symbol('NASDAQ:BND', '카나리아 자산4 (미국 혼합 채권)', group = '카나리아')
+
+// 공격 자산 입력 (4개)
+offenseSym1 = input.symbol('NASDAQ:QQQ', '공격 자산1 (나스닥100)', group = '공격 자산')
+offenseSym2 = input.symbol('AMEX:VWO', '공격 자산2 (신흥국 주식)', group = '공격 자산')
+offenseSym3 = input.symbol('AMEX:VEA', '공격 자산3 (선진국 주식)', group = '공격 자산')
+offenseSym4 = input.symbol('NASDAQ:BND', '공격 자산4 (미국 혼합 채권)', group = '공격 자산')
+
+// 안전 자산 입력 (7개)
+defenseSym1 = input.symbol('AMEX:BIL', '수비 자산1 (미국 초단기채)', group = '안전 자산')
+defenseSym2 = input.symbol('NASDAQ:IEF', '수비 자산2 (미국 중기채)', group = '안전 자산')
+defenseSym3 = input.symbol('NASDAQ:TLT', '수비 자산3 (미국 장기채)', group = '안전 자산')
+defenseSym4 = input.symbol('AMEX:LQD', '수비 자산4 (미국 회사채)', group = '안전 자산')
+defenseSym5 = input.symbol('AMEX:TIP', '수비 자산5 (물가연동채)', group = '안전 자산')
+defenseSym6 = input.symbol('NASDAQ:BND', '수비 자산6 (미국 혼합 채권)', group = '안전 자산')
+defenseSym7 = input.symbol('AMEX:DBC', '수비 자산7 (원자재)', group = '안전 자산')
+
+// 백테스트 기간 설정
+startYear = input(1, '시작 년')
+startMonth = input(1, '시작 월')
+startDay = input(1, '시작 일')
+endYear = input(9999, '종료 년')
+endMonth = input(12, '종료 월')
+endDay = input(31, '종료 일')
+startPeriod = timestamp(startYear, startMonth, startDay, 0, 0)
+endPeriod = timestamp(endYear, endMonth, endDay, 0, 0)
+testPeriod = time >= startPeriod and time <= endPeriod
+
+//***************************************************************************************//
+//                                          함 수 정 의                                   //
+//***************************************************************************************//
+// 종가 가져오기
+getClose(sym) =>
+    request.security(sym, timeframe.period, close, barmerge.gaps_off, barmerge.lookahead_on)
+
+// 12개월 이동평균 가져오기
+getMa(sym) =>
+    request.security(sym, timeframe.period, ta.sma(close, 12), barmerge.gaps_off, barmerge.lookahead_on)
+
+// 수익률 계산
+getYield(src, m) =>
+    (src / src[m] - 1) * 100
+
+// 모멘텀 스코어 계산
+getScoreMom(src) =>
+    12 * getYield(src, 1) + 4 * getYield(src, 3) + 2 * getYield(src, 6) + 1 * getYield(src, 12)
+
+// 현재가격/12개월 이동평균 구하기)
+getScoreP(sym) =>
+    getClose(sym) / getMa(sym)
+
+// 소수점 n자리 끊어내기
+truncate(number, decimals) =>
+    factor = math.pow(10, decimals)
+    int(number * factor) / factor
+
+//**********************************************************************************//
+//                                         연 산                                    //
+//**********************************************************************************//
+// 카나리아 자산의 종가
+canary1 = getClose(canarySym1)
+canary2 = getClose(canarySym2)
+canary3 = getClose(canarySym3)
+canary4 = getClose(canarySym4)
+
+// 카나리아 자산의 모멘텀 스코어
+scoreCan1 = truncate(getScoreMom(canary1), 2)
+scoreCan2 = truncate(getScoreMom(canary2), 2)
+scoreCan3 = truncate(getScoreMom(canary3), 2)
+scoreCan4 = truncate(getScoreMom(canary4), 2)
+
+// 카나리아는 죽었나? 
+liveCanary = scoreCan1 > 0 and scoreCan2 > 0 and scoreCan3 > 0 and scoreCan4 > 0 ? true : false
+deadCanary = scoreCan1 < 0 or scoreCan2 < 0 or scoreCan3 < 0 or scoreCan4 < 0 ? true : false
+
+// 공격적인 자산 종가
+off1 = getClose(offenseSym1)
+off2 = getClose(offenseSym2)
+off3 = getClose(offenseSym3)
+off4 = getClose(offenseSym4)
+
+// 수비적인 자산 종가
+def1 = getClose(defenseSym1)
+def2 = getClose(defenseSym2)
+def3 = getClose(defenseSym3)
+def4 = getClose(defenseSym4)
+def5 = getClose(defenseSym5)
+def6 = getClose(defenseSym6)
+def7 = getClose(defenseSym7)
+
+// 공격 자산의 스코어
+scoreOff1 = truncate(getScoreP(offenseSym1), 3)
+scoreOff2 = truncate(getScoreP(offenseSym2), 3)
+scoreOff3 = truncate(getScoreP(offenseSym3), 3)
+scoreOff4 = truncate(getScoreP(offenseSym4), 3)
+
+// 수비 자산의 스코어
+scoreDef1 = truncate(getScoreP(defenseSym1), 3)
+scoreDef2 = truncate(getScoreP(defenseSym2), 3)
+scoreDef3 = truncate(getScoreP(defenseSym3), 3)
+scoreDef4 = truncate(getScoreP(defenseSym4), 3)
+scoreDef5 = truncate(getScoreP(defenseSym5), 3)
+scoreDef6 = truncate(getScoreP(defenseSym6), 3)
+scoreDef7 = truncate(getScoreP(defenseSym7), 3)
+
+// 공격 자산의 최근 한달간의 수익률(누적 수익률을 구하기 위함)
+yieldOff1 = truncate(getYield(off1, 1), 2)
+yieldOff2 = truncate(getYield(off2, 1), 2)
+yieldOff3 = truncate(getYield(off3, 1), 2)
+yieldOff4 = truncate(getYield(off4, 1), 2)
+
+// 안전 자산의 최근 한달간 수익률(누적 수익률을 구하기 위함)
+yieldDef1 = truncate(getYield(def1, 1), 2)
+yieldDef2 = truncate(getYield(def2, 1), 2)
+yieldDef3 = truncate(getYield(def3, 1), 2)
+yieldDef4 = truncate(getYield(def4, 1), 2)
+yieldDef5 = truncate(getYield(def5, 1), 2)
+yieldDef6 = truncate(getYield(def6, 1), 2)
+yieldDef7 = truncate(getYield(def7, 1), 2)
+
+// 카나리아의 최근 한달간의 수익률(누적 수익률을 구하기 위함)
+yieldCan1 = truncate(getYield(canary1, 1), 2)
+yieldCan2 = truncate(getYield(canary2, 1), 2)
+yieldCan3 = truncate(getYield(canary3, 1), 2)
+yieldCan4 = truncate(getYield(canary4, 1), 2)
+
+if barstate.islast
+    //***********************************************************************************************//
+    //                                       공격 자산 Array                                          //
+    //***********************************************************************************************//
+    // 공격 자산 어레이 만들기
+    a_symbol_array = array.new_string(4)
+    a_score_array = array.new_float(4)
+    a_yield_array = array.new_float(4)
+
+    // 공격자산 array에 스코어 넣기 
+    array.set(a_score_array, 0, scoreOff1)
+    array.set(a_score_array, 1, scoreOff2)
+    array.set(a_score_array, 2, scoreOff3)
+    array.set(a_score_array, 3, scoreOff4)
+
+    // 공격자산 스코어 기준으로 정렬하기
+    array.sort(a_score_array, order.descending)
+
+    // 공격자산 새로운 인덱스 가져오기
+    scoreOff1_index = array.indexof(a_score_array, scoreOff1)
+    scoreOff2_index = array.indexof(a_score_array, scoreOff2)
+    scoreOff3_index = array.indexof(a_score_array, scoreOff3)
+    scoreOff4_index = array.indexof(a_score_array, scoreOff4)
+
+    // 공격자산 심볼텍스트 분리
+    a_sym_split1 = array.get(str.split(offenseSym1, ":"), 1)
+    a_sym_split2 = array.get(str.split(offenseSym2, ":"), 1)
+    a_sym_split3 = array.get(str.split(offenseSym3, ":"), 1)
+    a_sym_split4 = array.get(str.split(offenseSym4, ":"), 1)
+
+    // 공격자산 심볼을 추가하기 
+    array.set(a_symbol_array, scoreOff1_index, a_sym_split1)
+    array.set(a_symbol_array, scoreOff2_index, a_sym_split2)
+    array.set(a_symbol_array, scoreOff3_index, a_sym_split3)
+    array.set(a_symbol_array, scoreOff4_index, a_sym_split4)
+
+    // 공격자산 수익률 추가하기
+    array.set(a_yield_array, scoreOff1_index, yieldOff1)
+    array.set(a_yield_array, scoreOff2_index, yieldOff2)
+    array.set(a_yield_array, scoreOff3_index, yieldOff3)
+    array.set(a_yield_array, scoreOff4_index, yieldOff4)
+
+    //***********************************************************************************************//
+    //                                       수비 자산 Array                                          //
+    //***********************************************************************************************//
+    // 수비 자산 어레이 만들기
+    d_symbol_array = array.new_string(7)
+    d_score_array = array.new_float(7)
+    d_yield_array = array.new_float(7)
+
+    // 수비자산 array에 스코어 넣기
+    array.set(d_score_array, 0, scoreDef1)
+    array.set(d_score_array, 1, scoreDef2)
+    array.set(d_score_array, 2, scoreDef3)
+    array.set(d_score_array, 3, scoreDef4)
+    array.set(d_score_array, 4, scoreDef5)
+    array.set(d_score_array, 5, scoreDef6)
+    array.set(d_score_array, 6, scoreDef7)
+
+    // 수비자산 array 정렬
+    array.sort(d_score_array, order.descending)
+
+    // 수비자산 새로운 인덱스 가져오기
+    scoreDef1_index = array.indexof(d_score_array, scoreDef1)
+    scoreDef2_index = array.indexof(d_score_array, scoreDef2)
+    scoreDef3_index = array.indexof(d_score_array, scoreDef3)
+    scoreDef4_index = array.indexof(d_score_array, scoreDef4)
+    scoreDef5_index = array.indexof(d_score_array, scoreDef5)
+    scoreDef6_index = array.indexof(d_score_array, scoreDef6)
+    scoreDef7_index = array.indexof(d_score_array, scoreDef7)
+
+    // 수비자산 심볼텍스트 분리
+    d_sym_split1 = array.get(str.split(defenseSym1, ":"), 1)
+    d_sym_split2 = array.get(str.split(defenseSym2, ":"), 1)
+    d_sym_split3 = array.get(str.split(defenseSym3, ":"), 1)
+    d_sym_split4 = array.get(str.split(defenseSym4, ":"), 1)
+    d_sym_split5 = array.get(str.split(defenseSym5, ":"), 1)
+    d_sym_split6 = array.get(str.split(defenseSym6, ":"), 1)
+    d_sym_split7 = array.get(str.split(defenseSym7, ":"), 1)
+
+    // 수비자산 심볼을 추가하기 
+    array.set(d_symbol_array, scoreDef1_index, d_sym_split1)
+    array.set(d_symbol_array, scoreDef2_index, d_sym_split2)
+    array.set(d_symbol_array, scoreDef3_index, d_sym_split3)
+    array.set(d_symbol_array, scoreDef4_index, d_sym_split4)
+    array.set(d_symbol_array, scoreDef5_index, d_sym_split5)
+    array.set(d_symbol_array, scoreDef6_index, d_sym_split6)
+    array.set(d_symbol_array, scoreDef7_index, d_sym_split7)
+
+    // 수비자산 수익률 추가하기
+    array.set(d_yield_array, scoreDef1_index, yieldDef1)
+    array.set(d_yield_array, scoreDef2_index, yieldDef2)
+    array.set(d_yield_array, scoreDef3_index, yieldDef3)
+    array.set(d_yield_array, scoreDef4_index, yieldDef4)
+    array.set(d_yield_array, scoreDef5_index, yieldDef5)
+    array.set(d_yield_array, scoreDef6_index, yieldDef6)
+    array.set(d_yield_array, scoreDef7_index, yieldDef7)
+
+    //***********************************************************************************************//
+    //                                       카나리아 자산 Array                                      //
+    //***********************************************************************************************//
+    // 카나리아 어레이 만들기
+    c_symbol_array = array.new_string(4)
+    c_score_array = array.new_float(4)
+    c_yield_array = array.new_float(4)
+
+    // 카나리아 array에 스코어 넣기
+    array.set(c_score_array, 0, scoreCan1)
+    array.set(c_score_array, 1, scoreCan2)
+    array.set(c_score_array, 2, scoreCan3)
+    array.set(c_score_array, 3, scoreCan4)
+
+    // 카나리아 array 정렬
+    array.sort(c_score_array, order.descending)
+
+    // 카나리아 새로운 인덱스 가져오기
+    scoreCan1_index = array.indexof(c_score_array, scoreCan1)
+    scoreCan2_index = array.indexof(c_score_array, scoreCan2)
+    scoreCan3_index = array.indexof(c_score_array, scoreCan3)
+    scoreCan4_index = array.indexof(c_score_array, scoreCan4)
+
+    // 카나리아 심볼텍스트 분리
+    c_sym_split1 = array.get(str.split(canarySym1, ":"), 1)
+    c_sym_split2 = array.get(str.split(canarySym2, ":"), 1)
+    c_sym_split3 = array.get(str.split(canarySym3, ":"), 1)
+    c_sym_split4 = array.get(str.split(canarySym4, ":"), 1)
+
+    // 카나리아 심볼을 추가하기 
+    array.set(c_symbol_array, scoreCan1_index, c_sym_split1)
+    array.set(c_symbol_array, scoreCan2_index, c_sym_split2)
+    array.set(c_symbol_array, scoreCan3_index, c_sym_split3)
+    array.set(c_symbol_array, scoreCan4_index, c_sym_split4)
+
+    // 카나리아 수익률 추가하기
+    array.set(c_yield_array, scoreCan1_index, yieldCan1)
+    array.set(c_yield_array, scoreCan2_index, yieldCan2)
+    array.set(c_yield_array, scoreCan3_index, yieldCan3)
+    array.set(c_yield_array, scoreCan4_index, yieldCan4)
+
+    //***********************************************************************************************//
+    //                                          테이블                                               //
+    //***********************************************************************************************//
+    // 테이블 만들기
+    t = table.new(position = position.top_right, columns = 9, rows = 9, border_width = 1)
+
+    // 공격자산 테이블에 넣기
+    a_rank_color = liveCanary ? color.green : color.black
+    a_title_color = liveCanary ? color.green : color.black
+    table.cell(table_id = t, column = 0, row = 0, text = "공격자산", bgcolor=a_title_color, text_color = color.white)
+    table.merge_cells(table_id = t, start_column = 0, start_row = 0, end_column = 2, end_row = 0)
+    table.cell(table_id = t, column = 0, row = 1, text = "Symbol", bgcolor=a_rank_color, text_color = color.white, text_size = size.small)
+    table.cell(table_id = t, column = 1, row = 1, text = "Score", bgcolor=a_rank_color, text_color = color.white, text_size = size.small)
+    table.cell(table_id = t, column = 2, row = 1, text = "Return", bgcolor=a_rank_color, text_color = color.white, text_size = size.small)
+    table.cell(table_id = t, column = 0, row = 2, text = str.tostring(array.get(a_symbol_array, 0)), bgcolor=a_rank_color, text_color = color.white, text_size = size.small)
+    table.cell(table_id = t, column = 0, row = 3, text = str.tostring(array.get(a_symbol_array, 1)), bgcolor=color.black, text_color = color.white, text_size = size.small)
+    table.cell(table_id = t, column = 0, row = 4, text = str.tostring(array.get(a_symbol_array, 2)), bgcolor=color.black, text_color = color.white, text_size = size.small)
+    table.cell(table_id = t, column = 0, row = 5, text = str.tostring(array.get(a_symbol_array, 3)), bgcolor=color.black, text_color = color.white, text_size = size.small)
+    table.cell(table_id = t, column = 1, row = 2, text = str.tostring(array.get(a_score_array, 0)), bgcolor=a_rank_color, text_color = color.white, text_size = size.small)
+    table.cell(table_id = t, column = 1, row = 3, text = str.tostring(array.get(a_score_array, 1)), bgcolor=color.black, text_color = color.white, text_size = size.small)
+    table.cell(table_id = t, column = 1, row = 4, text = str.tostring(array.get(a_score_array, 2)), bgcolor=color.black, text_color = color.white, text_size = size.small)
+    table.cell(table_id = t, column = 1, row = 5, text = str.tostring(array.get(a_score_array, 3)), bgcolor=color.black, text_color = color.white, text_size = size.small)
+    table.cell(table_id = t, column = 2, row = 2, text = str.tostring(array.get(a_yield_array, 0))+"%", bgcolor=a_rank_color, text_color = color.white, text_size = size.small)
+    table.cell(table_id = t, column = 2, row = 3, text = str.tostring(array.get(a_yield_array, 1))+"%", bgcolor=color.black, text_color = color.white, text_size = size.small)
+    table.cell(table_id = t, column = 2, row = 4, text = str.tostring(array.get(a_yield_array, 2))+"%", bgcolor=color.black, text_color = color.white, text_size = size.small)
+    table.cell(table_id = t, column = 2, row = 5, text = str.tostring(array.get(a_yield_array, 3))+"%", bgcolor=color.black, text_color = color.white, text_size = size.small)
+
+    // 수비자산 테이블에 넣기
+    d_rank_color1 = deadCanary and array.get(d_score_array, 0) >= 1.0 ? color.green : color.black
+    d_rank_color2 = deadCanary and array.get(d_score_array, 1) >= 1.0 ? color.green : color.black
+    d_rank_color3 = deadCanary and array.get(d_score_array, 2) >= 1.0 ? color.green : color.red
+    d_title_color = deadCanary ? color.red : color.black
+    table.cell(table_id = t, column = 3, row = 0, text = "수비자산", bgcolor=d_title_color, text_color = color.white)
+    table.merge_cells(table_id = t, start_column = 3, start_row = 0, end_column = 5, end_row = 0)
+    table.cell(table_id = t, column = 3, row = 1, text = "Symbol", bgcolor=a_rank_color, text_color = color.white, text_size = size.small)
+    table.cell(table_id = t, column = 4, row = 1, text = "Score", bgcolor=a_rank_color, text_color = color.white, text_size = size.small)
+    table.cell(table_id = t, column = 5, row = 1, text = "Return", bgcolor=a_rank_color, text_color = color.white, text_size = size.small)
+    table.cell(table_id = t, column = 3, row = 2, text = str.tostring(array.get(d_symbol_array, 0)), bgcolor=d_rank_color1, text_color = color.white, text_size = size.small)
+    table.cell(table_id = t, column = 3, row = 3, text = str.tostring(array.get(d_symbol_array, 1)), bgcolor=d_rank_color2, text_color = color.white, text_size = size.small)
+    table.cell(table_id = t, column = 3, row = 4, text = str.tostring(array.get(d_symbol_array, 2)), bgcolor=d_rank_color3, text_color = color.white, text_size = size.small)
+    table.cell(table_id = t, column = 3, row = 5, text = str.tostring(array.get(d_symbol_array, 3)), bgcolor=color.black, text_color = color.white, text_size = size.small)
+    table.cell(table_id = t, column = 3, row = 6, text = str.tostring(array.get(d_symbol_array, 4)), bgcolor=color.black, text_color = color.white, text_size = size.small)
+    table.cell(table_id = t, column = 3, row = 7, text = str.tostring(array.get(d_symbol_array, 5)), bgcolor=color.black, text_color = color.white, text_size = size.small)
+    table.cell(table_id = t, column = 3, row = 8, text = str.tostring(array.get(d_symbol_array, 6)), bgcolor=color.black, text_color = color.white, text_size = size.small)
+    table.cell(table_id = t, column = 4, row = 2, text = str.tostring(array.get(d_score_array, 0)), bgcolor=d_rank_color1, text_color = color.white, text_size = size.small)
+    table.cell(table_id = t, column = 4, row = 3, text = str.tostring(array.get(d_score_array, 1)), bgcolor=d_rank_color2, text_color = color.white, text_size = size.small)
+    table.cell(table_id = t, column = 4, row = 4, text = str.tostring(array.get(d_score_array, 2)), bgcolor=d_rank_color3, text_color = color.white, text_size = size.small)
+    table.cell(table_id = t, column = 4, row = 5, text = str.tostring(array.get(d_score_array, 3)), bgcolor=color.black, text_color = color.white, text_size = size.small)
+    table.cell(table_id = t, column = 4, row = 6, text = str.tostring(array.get(d_score_array, 4)), bgcolor=color.black, text_color = color.white, text_size = size.small)
+    table.cell(table_id = t, column = 4, row = 7, text = str.tostring(array.get(d_score_array, 5)), bgcolor=color.black, text_color = color.white, text_size = size.small)
+    table.cell(table_id = t, column = 4, row = 8, text = str.tostring(array.get(d_score_array, 6)), bgcolor=color.black, text_color = color.white, text_size = size.small)
+    table.cell(table_id = t, column = 5, row = 2, text = str.tostring(array.get(d_yield_array, 0))+"%", bgcolor=d_rank_color1, text_color = color.white, text_size = size.small)
+    table.cell(table_id = t, column = 5, row = 3, text = str.tostring(array.get(d_yield_array, 1))+"%", bgcolor=d_rank_color2, text_color = color.white, text_size = size.small)
+    table.cell(table_id = t, column = 5, row = 4, text = str.tostring(array.get(d_yield_array, 2))+"%", bgcolor=d_rank_color3, text_color = color.white, text_size = size.small)
+    table.cell(table_id = t, column = 5, row = 5, text = str.tostring(array.get(d_yield_array, 3))+"%", bgcolor=color.black, text_color = color.white, text_size = size.small)
+    table.cell(table_id = t, column = 5, row = 6, text = str.tostring(array.get(d_yield_array, 4))+"%", bgcolor=color.black, text_color = color.white, text_size = size.small)
+    table.cell(table_id = t, column = 5, row = 7, text = str.tostring(array.get(d_yield_array, 5))+"%", bgcolor=color.black, text_color = color.white, text_size = size.small)
+    table.cell(table_id = t, column = 5, row = 8, text = str.tostring(array.get(d_yield_array, 6))+"%", bgcolor=color.black, text_color = color.white, text_size = size.small)
+
+    // 카나리아 테이블에 넣기
+    canary_bg_color = liveCanary ? color.green : color.red
+    canary_text = liveCanary ? "Live" : "Dead"
+    table.cell(table_id = t, column = 6, row = 0, text = "카나리아", bgcolor=color.rgb(252, 248, 47), text_color = color.black)
+    table.merge_cells(table_id = t, start_column = 6, start_row = 0, end_column = 8, end_row = 0)
+    table.cell(table_id = t, column = 6, row = 1, text = "Symbol", bgcolor=a_rank_color, text_color = color.white, text_size = size.small)
+    table.cell(table_id = t, column = 7, row = 1, text = "Score", bgcolor=a_rank_color, text_color = color.white, text_size = size.small)
+    table.cell(table_id = t, column = 8, row = 1, text = "Return", bgcolor=a_rank_color, text_color = color.white, text_size = size.small)
+    table.cell(table_id = t, column = 6, row = 2, text = str.tostring(array.get(c_symbol_array, 0)), bgcolor=color.black, text_color = color.white, text_size = size.small)
+    table.cell(table_id = t, column = 6, row = 3, text = str.tostring(array.get(c_symbol_array, 1)), bgcolor=color.black, text_color = color.white, text_size = size.small)
+    table.cell(table_id = t, column = 6, row = 4, text = str.tostring(array.get(c_symbol_array, 2)), bgcolor=color.black, text_color = color.white, text_size = size.small)
+    table.cell(table_id = t, column = 6, row = 5, text = str.tostring(array.get(c_symbol_array, 3)), bgcolor=color.black, text_color = color.white, text_size = size.small)
+    table.cell(table_id = t, column = 7, row = 2, text = str.tostring(array.get(c_score_array, 0)), bgcolor=color.black, text_color = color.white, text_size = size.small)
+    table.cell(table_id = t, column = 7, row = 3, text = str.tostring(array.get(c_score_array, 1)), bgcolor=color.black, text_color = color.white, text_size = size.small)
+    table.cell(table_id = t, column = 7, row = 4, text = str.tostring(array.get(c_score_array, 2)), bgcolor=color.black, text_color = color.white, text_size = size.small)
+    table.cell(table_id = t, column = 7, row = 5, text = str.tostring(array.get(c_score_array, 3)), bgcolor=color.black, text_color = color.white, text_size = size.small)
+    table.cell(table_id = t, column = 8, row = 2, text = str.tostring(array.get(c_yield_array, 0))+"%", bgcolor=color.black, text_color = color.white, text_size = size.small)
+    table.cell(table_id = t, column = 8, row = 3, text = str.tostring(array.get(c_yield_array, 1))+"%", bgcolor=color.black, text_color = color.white, text_size = size.small)
+    table.cell(table_id = t, column = 8, row = 4, text = str.tostring(array.get(c_yield_array, 2))+"%", bgcolor=color.black, text_color = color.white, text_size = size.small)
+    table.cell(table_id = t, column = 8, row = 5, text = str.tostring(array.get(c_yield_array, 3))+"%", bgcolor=color.black, text_color = color.white, text_size = size.small)
+    table.cell(table_id = t, column = 6, row = 6, text = "상태", bgcolor=color.black, text_color = color.white)
+    table.merge_cells(table_id = t, start_column = 6, start_row = 6, end_column = 6, end_row = 7)
+    table.cell(table_id = t, column = 7, row = 6, text = canary_text, bgcolor=canary_bg_color, text_color = color.white, text_size = size.large)
+    table.merge_cells(table_id = t, start_column = 7, start_row = 6, end_column = 8, end_row = 7)
+
